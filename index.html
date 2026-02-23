@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assam Teacher Salary Portal</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body{margin:0;font-family:Arial;background:#f2f4f8;}
+header{background:#0b3d2e;color:white;padding:15px;display:flex;align-items:center;}
+.card{background:white;margin:20px;padding:20px;border-radius:10px;
+box-shadow:0 5px 15px rgba(0,0,0,0.1);}
+input{width:100%;padding:10px;margin:8px 0;}
+button{padding:10px;margin:5px;background:#0b3d2e;color:white;border:none;cursor:pointer;}
+button:hover{background:#145a41;}
+</style>
+</head>
+
+<body>
+
+<header>
+<h2>Government of Assam – Teacher Salary Portal</h2>
+</header>
+
+<div id="authSection" class="card">
+<h3>Login / Register</h3>
+<input type="email" id="email" placeholder="Email">
+<input type="password" id="password" placeholder="Password">
+<button onclick="register()">Register</button>
+<button onclick="login()">Login</button>
+</div>
+
+<div id="dashboard" style="display:none;" class="card">
+
+<h3>Salary Calculator</h3>
+
+<input type="text" id="monthName" placeholder="Month">
+<input type="number" id="yearName" placeholder="Year">
+<input type="number" id="basicPay" placeholder="Basic Pay">
+<input type="number" id="gradePay" placeholder="Grade Pay">
+
+<button onclick="calculateSalary()">Calculate</button>
+<button onclick="saveSalary()">Save Record</button>
+<button onclick="downloadPDF()">Download PDF</button>
+<button onclick="logout()">Logout</button>
+
+<div id="result"></div>
+
+<h3>Salary History</h3>
+<div id="history"></div>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword,
+signInWithEmailAndPassword, signOut,
+onAuthStateChanged } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+import { getFirestore, collection,
+addDoc, getDocs, query, where }
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "PASTE_YOUR_KEY",
+  authDomain: "PASTE_YOUR_DOMAIN",
+  projectId: "PASTE_YOUR_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const DA_RATE = 0.58;
+let currentSalary = {};
+
+window.register = async function(){
+await createUserWithEmailAndPassword(auth,email.value,password.value);
+alert("Registered");
+}
+
+window.login = async function(){
+await signInWithEmailAndPassword(auth,email.value,password.value);
+}
+
+window.logout = async function(){
+await signOut(auth);
+}
+
+onAuthStateChanged(auth,(user)=>{
+if(user){
+authSection.style.display="none";
+dashboard.style.display="block";
+loadHistory(user.uid);
+}else{
+authSection.style.display="block";
+dashboard.style.display="none";
+}
+});
+
+window.calculateSalary = function(){
+
+let basic = Number(basicPay.value);
+let grade = Number(gradePay.value);
+
+let payband = basic + grade;
+let da = payband * DA_RATE;
+let gross = payband + da;
+let net = gross - 500;
+
+currentSalary = {
+month: monthName.value,
+year: yearName.value,
+gross,
+net
+};
+
+result.innerHTML = `
+Gross Salary: ₹${gross.toFixed(2)}<br>
+Net Salary: ₹${net.toFixed(2)}
+`;
+}
+
+window.saveSalary = async function(){
+const user = auth.currentUser;
+
+await addDoc(collection(db,"salaries"),{
+uid:user.uid,
+...currentSalary,
+created:new Date()
+});
+
+alert("Saved");
+loadHistory(user.uid);
+}
+
+async function loadHistory(uid){
+history.innerHTML="";
+const q = query(collection(db,"salaries"),where("uid","==",uid));
+const snapshot = await getDocs(q);
+
+snapshot.forEach(doc=>{
+let d = doc.data();
+history.innerHTML += `<p>${d.month} ${d.year} — ₹${d.net}</p>`;
+});
+}
+
+window.downloadPDF = function(){
+
+if(!currentSalary.net){
+alert("Calculate first");
+return;
+}
+
+const { jsPDF } = window.jspdf;
+const doc = new jsPDF();
+
+doc.text("Government of Assam",20,20);
+doc.text("Teacher Salary Slip",20,30);
+doc.text(`Month: ${currentSalary.month} ${currentSalary.year}`,20,40);
+doc.text(`Gross: ₹${currentSalary.gross}`,20,60);
+doc.text(`Net: ₹${currentSalary.net}`,20,70);
+
+doc.save("SalarySlip.pdf");
+}
+
+</script>
+
+</body>
+</html>
